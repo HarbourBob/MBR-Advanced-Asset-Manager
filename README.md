@@ -3,8 +3,8 @@
 [![WordPress Plugin](https://img.shields.io/badge/WordPress-5.8%2B-blue.svg)](https://wordpress.org/)
 [![PHP Version](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/License-GPLv3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
-[![Version](https://img.shields.io/badge/Version-2.3.0-orange.svg)](https://github.com/yourusername/mbr-advanced-asset-manager)
-[![Downloads](https://img.shields.io/badge/Downloads-10K%2B-brightgreen.svg)](https://github.com/yourusername/mbr-advanced-asset-manager/releases)
+[![Version](https://img.shields.io/badge/Version-2.3.0-orange.svg)](https://github.com/harbourbob/mbr-advanced-asset-manager)
+[![Downloads](https://img.shields.io/badge/Downloads-10K%2B-brightgreen.svg)](https://github.com/harbourbob/mbr-advanced-asset-manager/releases)
 
 ![MBR Advanced Asset Manager Screenshot](screenshot.png)
 
