@@ -1,19 +1,18 @@
 # MBR Advanced Asset Manager
 
 [![GitHub Release](https://img.shields.io/github/v/release/harbourbob/MBR-Advanced-Asset-Manager)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/harbourbob/MBR-Advanced-Asset-Manager/total)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/harbourbob/MBR-Advanced-Asset-Manager?style=social)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager)
 [![GitHub Forks](https://img.shields.io/github/forks/harbourbob/MBR-Advanced-Asset-Manager?style=social)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager)
 [![GitHub Issues](https://img.shields.io/github/issues/harbourbob/MBR-Advanced-Asset-Manager)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager/issues)
 
 ![MBR Advanced Asset Manager Screenshot](screenshot.png)
 
-A powerful WordPress plugin that helps you optimize page load times by selectively blocking unnecessary CSS and JavaScript files on specific pages. Completely standalone with no external dependencies!
+A powerful WordPress plugin that helps you optimise page load times by selectively blocking unnecessary CSS and JavaScript files on specific pages. Completely standalone with no external dependencies!
 
 ## 🚀 Key Features
 
 - **✅ 100% Local** - No external APIs, everything runs on your WordPress installation
-- **📊 Asset Analysis** - See file sizes to identify optimization opportunities
+- **📊 Asset Analysis** - See file sizes to identify optimisation opportunities
 - **📱 Device-Specific Blocking** - Block assets for mobile, desktop, or both
 - **🔍 Preview Mode** - Test blocking rules safely before applying them
 - **🎯 Page-Specific Control** - Fine-grained blocking per page
@@ -73,7 +72,7 @@ For maximum blocking effectiveness:
 
 1. **Access the plugin**: Go to **Settings → Advanced Asset Manager**
 2. **Select a page**: Choose from the dropdown menu
-3. **Scan assets**: Click "Scan assets" to analyze the page
+3. **Scan assets**: Click "Scan assets" to analyse the page
 4. **Review results**: See all CSS/JS files sorted by size
 5. **Select assets**: Check boxes for files you want to block
 6. **Choose devices**: Select mobile, desktop, or both for each asset
@@ -133,7 +132,7 @@ Assets are only blocked on the public-facing site, never in editor mode!
 - ✅ Always use preview mode before saving
 - ✅ Start with the largest files
 - ✅ Test thoroughly after blocking
-- ✅ Optimize page by page
+- ✅ Optimise page by page
 - ✅ Clear all caches after changes
 
 ### DON'T:
@@ -262,7 +261,7 @@ This plugin is licensed under the GPLv3 or later. See [LICENSE](LICENSE) file fo
 
 ## ⭐ Show Your Support
 
-If this plugin helps optimize your WordPress site, please consider:
+If this plugin helps optimise your WordPress site, please consider:
 - Starring this repository ⭐
 - Sharing it with others
 - Contributing improvements
