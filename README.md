@@ -6,7 +6,7 @@
 [![GitHub Issues](https://img.shields.io/github/issues/harbourbob/MBR-Advanced-Asset-Manager)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager/issues)
 [![GitHub Downloads](https://img.shields.io/github/downloads/harbourbob/MBR-Advanced-Asset-Manager/total?style=flat-square&color=brightgreen&logo=github)](https://github.com/harbourbob/MBR-Advanced-Asset-Manager/releases)
 
-![MBR Advanced Asset Manager Screenshot](screenshot.png)
+![MBR Advanced Asset Manager Screenshot](screenshot 1.png)
 
 A powerful WordPress plugin that helps you optimise page load times by selectively blocking unnecessary CSS and JavaScript files on specific pages. Completely standalone with no external dependencies!
 
