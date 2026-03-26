@@ -3,7 +3,7 @@
  * Plugin Name:       MBR Advanced Asset Manager
  * Plugin URI:        https://littlewebshack.com
  * Description:       Easily manage/block unnecessary and unwanted CSS (styles)/JS (scripts) from running on individual pages. Save on average 2-3MB. No external services required.
- * Version:           2.3.0
+ * Version:           2.4.0
  * Author:            Robert Palmer
  * Author URI:        https://littlewebshack.com
  * Text Domain:       mbr-advanced-asset-manager
@@ -39,6 +39,7 @@ final class MBR_Advanced_Asset_Manager {
     private static $instance = null;
     const META_KEY = '_mbr_asm_blocklist_v1';
     const META_DISABLE = '_mbr_asm_disable';
+    const GLOBAL_KEY = 'mbr_asm_global_blocklist';
 
     public static function instance() {
         if ( self::$instance === null ) {
@@ -54,6 +55,8 @@ final class MBR_Advanced_Asset_Manager {
         add_action( 'wp_ajax_mbr_asm_save_blocklist', [ $this, 'ajax_save_blocklist' ] );
         add_action( 'wp_ajax_mbr_asm_clear_blocklist', [ $this, 'ajax_clear_blocklist' ] );
         add_action( 'wp_ajax_mbr_asm_set_disabled', [ $this, 'ajax_set_disabled' ] );
+        add_action( 'wp_ajax_mbr_asm_save_global_blocklist', [ $this, 'ajax_save_global_blocklist' ] );
+        add_action( 'wp_ajax_mbr_asm_get_global_blocklist', [ $this, 'ajax_get_global_blocklist' ] );
         
         // Frontend blocking - use MULTIPLE hooks to catch scripts at different stages
         if ( ! is_admin() || ( defined( 'DOING_AJAX' ) && DOING_AJAX ) ) {
@@ -148,8 +151,16 @@ final class MBR_Advanced_Asset_Manager {
         $preview_mode = isset( $_GET['mbr_asm_preview'] ) && $_GET['mbr_asm_preview'] === '1'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         
         if ( ! $page_id ) {
-            return;
-        }
+            // No page ID, but global blocklist may still apply
+            $blocklist = [];
+            $global_blocklist = get_option( self::GLOBAL_KEY, [] );
+            if ( is_array( $global_blocklist ) && ! empty( $global_blocklist ) ) {
+                $blocklist = $global_blocklist;
+            }
+            if ( empty( $blocklist ) ) {
+                return;
+            }
+        } else {
         
         // Get blocklist
         $blocklist = [];
@@ -206,9 +217,21 @@ final class MBR_Advanced_Asset_Manager {
             $blocklist = get_post_meta( $page_id, self::META_KEY, true );
         }
         
-        if ( ! is_array( $blocklist ) || empty( $blocklist ) ) {
+        if ( ! is_array( $blocklist ) ) {
+            $blocklist = [];
+        }
+        
+        // Merge global blocklist (Block on All Pages)
+        $global_blocklist = get_option( self::GLOBAL_KEY, [] );
+        if ( is_array( $global_blocklist ) && ! empty( $global_blocklist ) ) {
+            $blocklist = array_merge( $blocklist, $global_blocklist );
+        }
+        
+        if ( empty( $blocklist ) ) {
             return;
         }
+        
+        } // end else (has page_id)
         
         $is_mobile = wp_is_mobile();
         $device = $is_mobile ? 'mobile' : 'desktop';
@@ -517,7 +540,90 @@ final class MBR_Advanced_Asset_Manager {
         }
         wp_enqueue_script( 'jquery' );
 
-        $inline_css = '.asm-table{border-collapse:collapse;width:100%}.asm-table th,.asm-table td{border:1px solid #ddd;padding:6px;vertical-align:top} .column-url{word-break:break-all} .asm-controls{margin:12px 0} .asm-muted{color:#666} .asm-num{text-align:right;white-space:nowrap} .asm-table tbody tr:nth-child(even){background:#F0F0F1;} .asm-device{min-width:9rem} .asm-toolbar{display:flex;gap:8px;align-items:center;margin:8px 0;} .asm-switch{display:inline-flex;align-items:center;gap:6px;}';
+        $inline_css = '
+/* ═══ Dark Mode Admin UI ═══ */
+.asm-wrap{background:#1e1e2e;color:#cdd6f4;border-radius:12px;padding:24px 28px;margin:20px 20px 20px 0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif}
+.asm-wrap h1{color:#cba6f7;font-size:22px;font-weight:700;margin:0 0 6px;letter-spacing:-.3px}
+.asm-wrap .asm-subtitle{color:#a6adc8;font-size:13px;margin:0 0 20px}
+.asm-table{border-collapse:separate;border-spacing:0;width:100%;border-radius:8px;overflow:hidden;border:1px solid #313244}
+.asm-table th{background:#181825;color:#a6adc8;font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:10px 14px;border-bottom:2px solid #313244;text-align:left;font-weight:600}
+.asm-table td{background:#1e1e2e;padding:10px 14px;border-bottom:1px solid #313244;vertical-align:middle;font-size:13px;color:#cdd6f4}
+.asm-table tbody tr:hover td{background:#262637}
+.asm-table tbody tr.asm-row-critical td{background:#45324e!important}
+.column-url{word-break:break-all;color:#89b4fa;font-family:"SF Mono",Monaco,Inconsolata,monospace;font-size:12px}
+.asm-controls{margin:0 0 20px}
+.asm-muted{color:#6c7086}
+.asm-num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ═══ Select + Buttons ═══ */
+.asm-wrap select,.asm-wrap .asm-device{background:#313244;color:#fff;border:1px solid #45475a;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;cursor:pointer}
+.asm-wrap select:focus,.asm-wrap .asm-device:focus{border-color:#89b4fa;box-shadow:0 0 0 2px rgba(137,180,250,.2)}
+.asm-wrap select option{background:#313244;color:#fff}
+.asm-wrap .button{background:#313244;color:#cdd6f4;border:1px solid #45475a;border-radius:6px;padding:6px 16px;font-size:13px;cursor:pointer;transition:all .15s ease}
+.asm-wrap .button:hover{background:#45475a;border-color:#585b70;color:#fff}
+.asm-wrap .button:focus{box-shadow:0 0 0 2px rgba(137,180,250,.25);outline:none}
+.asm-wrap .button-primary{background:#89b4fa;color:#1e1e2e;border-color:#89b4fa;font-weight:600}
+.asm-wrap .button-primary:hover{background:#74c7ec;border-color:#74c7ec;color:#1e1e2e}
+.asm-wrap .button-danger{background:#f38ba8;color:#1e1e2e;border-color:#f38ba8;font-weight:600}
+.asm-wrap .button-danger:hover{background:#eba0ac;border-color:#eba0ac;color:#1e1e2e}
+
+/* ═══ Toggle Switch ═══ */
+.asm-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;gap:8px;font-size:13px;user-select:none}
+.asm-toggle input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.asm-toggle .asm-toggle-track{position:relative;width:40px;height:22px;background:#45475a;border-radius:11px;transition:background .2s ease;flex-shrink:0}
+.asm-toggle .asm-toggle-track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;background:#6c7086;border-radius:50%;transition:all .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.asm-toggle input:checked+.asm-toggle-track{background:#89b4fa}
+.asm-toggle input:checked+.asm-toggle-track::after{transform:translateX(18px);background:#1e1e2e}
+.asm-toggle input:focus-visible+.asm-toggle-track{box-shadow:0 0 0 2px rgba(137,180,250,.4)}
+.asm-toggle .asm-toggle-label{color:#cdd6f4;font-size:12px}
+
+/* Block toggle - red */
+.asm-toggle-block input:checked+.asm-toggle-track{background:#f38ba8}
+.asm-toggle-block input:checked+.asm-toggle-track::after{background:#1e1e2e}
+
+/* Global toggle - purple */
+.asm-toggle-global input:checked+.asm-toggle-track{background:#cba6f7}
+.asm-toggle-global input:checked+.asm-toggle-track::after{background:#1e1e2e}
+
+/* ═══ Stats Header ═══ */
+.asm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;background:#181825;border:1px solid #313244;border-radius:10px;padding:18px 22px;margin:0 0 20px}
+.asm-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#6c7086;font-weight:600;margin-bottom:4px}
+.asm-stat-value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.asm-stat-blocked{color:#f38ba8}
+.asm-stat-saved{color:#a6e3a1}
+
+/* ═══ Section Headers ═══ */
+.asm-section-header{margin:24px 0 12px;padding:12px 16px;border-radius:8px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.asm-section-css{background:rgba(137,180,250,.08);border-left:4px solid #89b4fa;color:#89b4fa}
+.asm-section-js{background:rgba(166,227,161,.08);border-left:4px solid #a6e3a1;color:#a6e3a1}
+
+/* ═══ Toolbar ═══ */
+.asm-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+
+/* ═══ Overlays ═══ */
+.asm-overlay{display:none;position:fixed;inset:0;background:rgba(17,17,27,.85);z-index:9999;backdrop-filter:blur(4px)}
+.asm-overlay-inner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#cdd6f4}
+.asm-overlay .spinner{filter:brightness(2)}
+
+/* ═══ Scroll Top ═══ */
+#asm_scroll_top{display:none;position:fixed;bottom:20px;right:20px;background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:12px 16px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9998;font-size:13px;font-weight:700;transition:all .2s ease}
+#asm_scroll_top:hover{background:#74c7ec;transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.5)}
+
+/* ═══ Notice Overrides ═══ */
+.asm-wrap .notice{background:#313244;border-color:#45475a;color:#cdd6f4;border-radius:6px;padding:10px 14px}
+.asm-wrap .notice-error{border-left-color:#f38ba8}
+.asm-wrap .notice-success{border-left-color:#a6e3a1}
+
+/* ═══ Critical Tag ═══ */
+.asm-critical-badge{color:#f38ba8;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+
+/* ═══ Source Tag ═══ */
+.asm-source{display:inline-block;background:#313244;color:#a6adc8;padding:2px 8px;border-radius:4px;font-size:11px}
+
+/* ═══ Action Cell ═══ */
+.asm-action-cell{display:flex;flex-direction:column;gap:6px}
+.asm-action-row{display:flex;align-items:center;gap:10px}
+';
         wp_register_style( 'asm-safe-inline', false );
         wp_enqueue_style( 'asm-safe-inline' );
         wp_add_inline_style( 'asm-safe-inline', $inline_css );
@@ -538,70 +644,65 @@ final class MBR_Advanced_Asset_Manager {
         }
         $pages = get_pages( [ 'sort_column' => 'post_title', 'sort_order' => 'ASC' ] );
         ?>
-        <div class="wrap">
+        <div class="asm-wrap">
             <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-            <p><?php esc_html_e( 'Scan a page, sort by size, and block per device. Use "Preview (dry run)" to test without saving. No external services required - all scanning is done locally.', 'mbr-advanced-asset-manager' ); ?></p>
+            <p class="asm-subtitle"><?php esc_html_e( 'Scan a page, sort by size, and block per device. Use "Preview (dry run)" to test without saving. No external services required.', 'mbr-advanced-asset-manager' ); ?></p>
             
             <!-- Stats Header -->
-            <div id="asm_stats_header" style="display:none;background:#f0f0f1;border:1px solid #c3c4c7;border-radius:4px;padding:15px 20px;margin:15px 0;">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
-                    <div>
-                        <div style="font-size:11px;text-transform:uppercase;color:#646970;font-weight:600;margin-bottom:4px;">Files Blocked</div>
-                        <div id="asm_stat_blocked" style="font-size:24px;font-weight:600;color:#2271b1;">0</div>
-                    </div>
-                    <div>
-                        <div style="font-size:11px;text-transform:uppercase;color:#646970;font-weight:600;margin-bottom:4px;">Total Size Saved</div>
-                        <div id="asm_stat_saved" style="font-size:24px;font-weight:600;color:#00a32a;">0 KB</div>
-                    </div>
+            <div id="asm_stats_header" class="asm-stats" style="display:none;">
+                <div>
+                    <div class="asm-stat-label"><?php esc_html_e( 'Files Blocked', 'mbr-advanced-asset-manager' ); ?></div>
+                    <div id="asm_stat_blocked" class="asm-stat-value asm-stat-blocked">0</div>
+                </div>
+                <div>
+                    <div class="asm-stat-label"><?php esc_html_e( 'Total Size Saved', 'mbr-advanced-asset-manager' ); ?></div>
+                    <div id="asm_stat_saved" class="asm-stat-value asm-stat-saved">0 KB</div>
+                </div>
+                <div>
+                    <div class="asm-stat-label"><?php esc_html_e( 'Global Rules', 'mbr-advanced-asset-manager' ); ?></div>
+                    <div id="asm_stat_global" class="asm-stat-value" style="color:#cba6f7;">0</div>
                 </div>
             </div>
 
             <div class="asm-controls">
-                <label for="asm_page"><?php esc_html_e( 'Page:', 'mbr-advanced-asset-manager' ); ?></label>
-                <select id="asm_page">
-                    <option value=""><?php esc_html_e( '— Select —', 'mbr-advanced-asset-manager' ); ?></option>
-                    <?php foreach ( $pages as $p ) : ?>
-                        <option value="<?php echo (int) $p->ID; ?>"><?php echo esc_html( $p->post_title ?: "ID {$p->ID}" ); ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <button type="button" class="button button-primary" id="asm_scan"><?php esc_html_e( 'Scan assets', 'mbr-advanced-asset-manager' ); ?></button>
-                <span id="asm_spinner" class="spinner" style="float:none;margin:0 8px;display:none;"></span>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <label for="asm_page" style="font-weight:600;color:#a6adc8;"><?php esc_html_e( 'Page:', 'mbr-advanced-asset-manager' ); ?></label>
+                    <select id="asm_page">
+                        <option value=""><?php esc_html_e( '— Select —', 'mbr-advanced-asset-manager' ); ?></option>
+                        <?php foreach ( $pages as $p ) : ?>
+                            <option value="<?php echo (int) $p->ID; ?>"><?php echo esc_html( $p->post_title ?: "ID {$p->ID}" ); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="button" class="button button-primary" id="asm_scan"><?php esc_html_e( 'Scan assets', 'mbr-advanced-asset-manager' ); ?></button>
+                    <span id="asm_spinner" class="spinner" style="float:none;margin:0;display:none;filter:brightness(2);"></span>
+                </div>
                 <div class="asm-toolbar">
                     <button type="button" class="button" id="asm_preview" style="display:none"><?php esc_html_e( 'Preview (dry run)', 'mbr-advanced-asset-manager' ); ?></button>
                     <button type="button" class="button button-primary" id="asm_save" style="display:none"><?php esc_html_e( 'Save blocklist', 'mbr-advanced-asset-manager' ); ?></button>
-                    <button type="button" class="button" id="asm_clear" style="display:none"><?php esc_html_e( 'Clear all rules for this page', 'mbr-advanced-asset-manager' ); ?></button>
-                    <label class="asm-switch" style="display:none"><input type="checkbox" id="asm_disable"><span><?php esc_html_e( 'Temporarily disable blocking on this page (for editors)', 'mbr-advanced-asset-manager' ); ?></span></label>
+                    <button type="button" class="button button-danger" id="asm_clear" style="display:none"><?php esc_html_e( 'Clear all rules for this page', 'mbr-advanced-asset-manager' ); ?></button>
+                    <label class="asm-toggle" style="display:none"><input type="checkbox" id="asm_disable"><span class="asm-toggle-track"></span><span class="asm-toggle-label"><?php esc_html_e( 'Temporarily disable blocking on this page (for editors)', 'mbr-advanced-asset-manager' ); ?></span></label>
                     <span id="asm_feedback" class="asm-muted" style="margin-left:8px;"></span>
                 </div>
             </div>
 
-            <div id="asm_totals" class="asm-muted" style="margin-top:8px;margin-bottom:8px;"></div>
+            <div id="asm_totals" class="asm-muted" style="margin-bottom:12px;font-size:12px;"></div>
             <div id="asm_results"></div>
-            <div id="asm_loading_overlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.8);z-index:9999;">
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
-                    <span class="spinner is-active" style="float:none;visibility:visible;"></span>
-                    <div style="margin-top:12px;font-weight:600;font-size:16px;">Loading Assets…</div>
+            
+            <div id="asm_loading_overlay" class="asm-overlay">
+                <div class="asm-overlay-inner">
+                    <span class="spinner is-active" style="float:none;visibility:visible;width:30px;height:30px;"></span>
+                    <div style="margin-top:12px;font-weight:600;font-size:16px;"><?php esc_html_e( 'Loading Assets…', 'mbr-advanced-asset-manager' ); ?></div>
                 </div>
             </div>
-            <div id="asm_saving_overlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.8);z-index:9999;">
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
-                    <span class="spinner is-active" style="float:none;visibility:visible;"></span>
-                    <div style="margin-top:12px;font-weight:600;font-size:16px;">Saving Assets…</div>
+            <div id="asm_saving_overlay" class="asm-overlay">
+                <div class="asm-overlay-inner">
+                    <span class="spinner is-active" style="float:none;visibility:visible;width:30px;height:30px;"></span>
+                    <div style="margin-top:12px;font-weight:600;font-size:16px;"><?php esc_html_e( 'Saving Assets…', 'mbr-advanced-asset-manager' ); ?></div>
                 </div>
             </div>
             
-            <!-- Scroll to Top Button -->
-            <button id="asm_scroll_top" style="display:none;position:fixed;bottom:20px;right:20px;background:#2271b1;color:#fff;border:none;border-radius:4px;padding:12px 16px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9998;font-size:14px;font-weight:600;transition:all 0.3s ease;" title="Scroll to top">
-                ↑ Top
-            </button>
+            <button id="asm_scroll_top" title="Scroll to top">↑ Top</button>
         </div>
-        <style>
-            #asm_totals{font-size:12px;color:#50575e}
-            #asm_loading_overlay .spinner,
-            #asm_saving_overlay .spinner{width:30px;height:30px}
-            #asm_scroll_top:hover{background:#135e96;transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.3);}
-            #asm_scroll_top:active{transform:translateY(0);box-shadow:0 2px 6px rgba(0,0,0,0.2);}
-        </style>
         <script>
         jQuery(function($){
             const $page = $('#asm_page'), $scan = $('#asm_scan'), $spinner = $('#asm_spinner'),
@@ -610,8 +711,19 @@ final class MBR_Advanced_Asset_Manager {
 
             let currentDisabled = false;
             let lastScanData = null;
+            let globalBlocklist = [];
 
-            // Scroll to top button functionality
+            // Load global blocklist on init
+            $.post(window.ASM_SAFE.ajax, {
+                action: 'mbr_asm_get_global_blocklist',
+                _ajax_nonce: window.ASM_SAFE.nonce
+            }, function(res){
+                if (res.success && Array.isArray(res.data)) {
+                    globalBlocklist = res.data;
+                }
+            });
+
+            // Scroll to top
             const $scrollBtn = $('#asm_scroll_top');
             $(window).on('scroll', function(){
                 if ($(window).scrollTop() > 300) {
@@ -655,9 +767,12 @@ final class MBR_Advanced_Asset_Manager {
                 while (val >= 1024 && i < units.length-1){ val/=1024; i++; }
                 return (Math.round(val*10)/10)+' '+units[i];
             }
+
+            function isGlobal(url, type) {
+                return globalBlocklist.some(g => norm(g.url) === norm(url) && g.type === type);
+            }
             
             function row(label, url, source, type, size, checked, device){
-                // Check if this is a critical WordPress script
                 const isCritical = type === 'script' && (
                     url.includes('/wp-includes/js/jquery/jquery') ||
                     url.includes('/wp-includes/js/jquery/jquery-migrate') ||
@@ -668,34 +783,39 @@ final class MBR_Advanced_Asset_Manager {
                     url.includes('/wp-includes/js/dist/api-fetch') ||
                     url.includes('/wp-includes/js/dist/dom-ready') ||
                     url.includes('/wp-includes/js/dist/element') ||
-                    label === 'jquery' ||
-                    label === 'jquery-core' ||
-                    label === 'jquery-migrate'
+                    label === 'jquery' || label === 'jquery-core' || label === 'jquery-migrate'
                 );
                 
-                const warning = isCritical ? ' <span style="color:#d63638;font-weight:600;" title="This is a critical WordPress script. Blocking it may break your site.">⚠️ CRITICAL</span>' : '';
-                const disableCheckbox = isCritical ? ' disabled title="Cannot block critical WordPress scripts"' : '';
+                const warning = isCritical ? ' <span class="asm-critical-badge" title="Critical WordPress script — blocking may break your site.">⚠ CRITICAL</span>' : '';
+                const disableAttr = isCritical ? ' disabled' : '';
+                const isGlobalChecked = isGlobal(url, type);
+                const isBlocked = checked || isGlobalChecked;
                 
-                const devSel = `<select class="asm-device" data-url="${url}" data-type="${type}"${isCritical ? ' disabled' : ''}>
-                    <option value="any"${device==='any'?' selected':''}>Any device</option>
-                    <option value="desktop"${device==='desktop'?' selected':''}>Desktop</option>
-                    <option value="mobile"${device==='mobile'?' selected':''}>Mobile</option>
-                </select>`;
+                const devSel = '<select class="asm-device" data-url="' + url + '" data-type="' + type + '"' + (isCritical ? ' disabled' : '') + '>' +
+                    '<option value="any"' + (device==='any'?' selected':'') + '>Any device</option>' +
+                    '<option value="desktop"' + (device==='desktop'?' selected':'') + '>Desktop</option>' +
+                    '<option value="mobile"' + (device==='mobile'?' selected':'') + '>Mobile</option>' +
+                    '</select>';
                 
-                return `<tr${isCritical ? ' style="background:#fff3cd;"' : ''}>
-                    <td>${label || ''}${warning}</td>
-                    <td class="column-url">${url}</td>
-                    <td>${source || ''}</td>
-                    <td class="asm-num" data-bytes="${size||0}">${humanBytes(size)}</td>
-                    <td>
-                        <label><input type="checkbox" class="asm-block" data-url="${url}" data-type="${type}" ${checked?'checked':''}${disableCheckbox}> ${isCritical ? 'Protected' : 'Block'}</label>
-                        &nbsp;${devSel}
-                    </td>
-                </tr>`;
+                return '<tr class="' + (isCritical ? 'asm-row-critical' : '') + '">' +
+                    '<td>' + (label || '<em class="asm-muted">—</em>') + warning + '</td>' +
+                    '<td class="column-url">' + url + '</td>' +
+                    '<td><span class="asm-source">' + (source || '') + '</span></td>' +
+                    '<td class="asm-num" data-bytes="' + (size||0) + '">' + humanBytes(size) + '</td>' +
+                    '<td><div class="asm-action-cell">' +
+                        '<div class="asm-action-row">' +
+                            '<label class="asm-toggle asm-toggle-block"><input type="checkbox" class="asm-block" data-url="' + url + '" data-type="' + type + '" ' + (isBlocked?'checked':'') + disableAttr + '><span class="asm-toggle-track"></span><span class="asm-toggle-label">' + (isCritical ? 'Protected' : 'Block') + '</span></label>' +
+                            '&nbsp;' + devSel +
+                        '</div>' +
+                        (!isCritical ? '<div class="asm-action-row">' +
+                            '<label class="asm-toggle asm-toggle-global"><input type="checkbox" class="asm-global" data-url="' + url + '" data-type="' + type + '" ' + (isGlobalChecked?'checked':'') + '><span class="asm-toggle-track"></span><span class="asm-toggle-label">All Pages</span></label>' +
+                        '</div>' : '') +
+                    '</div></td>' +
+                '</tr>';
             }
             
             function notice(type, msg){ 
-                return `<div class="notice notice-${type}"><p>${msg}</p></div>`; 
+                return '<div class="notice notice-' + type + '"><p>' + msg + '</p></div>'; 
             }
 
             function buildMap(existing){
@@ -724,14 +844,54 @@ final class MBR_Advanced_Asset_Manager {
                     }
                 });
 
-                if (items.length > 0) {
+                // Count globals
+                const globalCount = globalBlocklist.length;
+
+                if (items.length > 0 || globalCount > 0) {
                     $('#asm_stats_header').show();
                     $('#asm_stat_blocked').text(items.length + ' file' + (items.length !== 1 ? 's' : ''));
                     $('#asm_stat_saved').text(humanBytes(totalSaved));
+                    $('#asm_stat_global').text(globalCount + ' rule' + (globalCount !== 1 ? 's' : ''));
                 } else {
                     $('#asm_stats_header').hide();
                 }
             }
+
+            // Handle global toggle changes
+            $(document).on('change', '.asm-global', function(){
+                const $g = $(this);
+                const url = $g.data('url');
+                const type = $g.data('type');
+                const checked = $g.is(':checked');
+                
+                if (checked) {
+                    // Also check the block toggle
+                    const $block = $('.asm-block[data-url="' + url + '"][data-type="' + type + '"]');
+                    $block.prop('checked', true);
+                    
+                    // Add to global
+                    const device = $('.asm-device[data-url="' + url + '"][data-type="' + type + '"]').val() || 'any';
+                    if (!globalBlocklist.some(g => norm(g.url) === norm(url) && g.type === type)) {
+                        globalBlocklist.push({ url: url, type: type, device: device });
+                    }
+                } else {
+                    // Remove from global
+                    globalBlocklist = globalBlocklist.filter(g => !(norm(g.url) === norm(url) && g.type === type));
+                }
+                
+                // Save global list
+                $.post(window.ASM_SAFE.ajax, {
+                    action: 'mbr_asm_save_global_blocklist',
+                    _ajax_nonce: window.ASM_SAFE.nonce,
+                    items: JSON.stringify(globalBlocklist)
+                }, function(res){
+                    if (res.success) {
+                        $fb.text('✔ Global rules updated').css('color','#a6e3a1');
+                        setTimeout(() => $fb.text(''), 3000);
+                        $('#asm_stat_global').text(globalBlocklist.length + ' rule' + (globalBlocklist.length !== 1 ? 's' : ''));
+                    }
+                });
+            });
 
             function renderResults(data){
                 const styles = data.styles || [];
@@ -743,12 +903,10 @@ final class MBR_Advanced_Asset_Manager {
                 currentDisabled = disabled;
                 $disable.prop('checked', disabled);
 
-                // Calculate blocked stats
                 let blockedCount = 0;
                 let totalSaved = 0;
                 existing.forEach(item => {
                     blockedCount++;
-                    // Find the size in the data
                     const allAssets = [...styles, ...scripts];
                     const asset = allAssets.find(a => norm(a.url) === norm(item.url));
                     if (asset && asset.size) {
@@ -756,11 +914,13 @@ final class MBR_Advanced_Asset_Manager {
                     }
                 });
 
-                // Update stats header
-                if (blockedCount > 0) {
+                const globalCount = globalBlocklist.length;
+
+                if (blockedCount > 0 || globalCount > 0) {
                     $('#asm_stats_header').show();
                     $('#asm_stat_blocked').text(blockedCount + ' file' + (blockedCount !== 1 ? 's' : ''));
                     $('#asm_stat_saved').text(humanBytes(totalSaved));
+                    $('#asm_stat_global').text(globalCount + ' rule' + (globalCount !== 1 ? 's' : ''));
                 } else {
                     $('#asm_stats_header').hide();
                 }
@@ -772,10 +932,9 @@ final class MBR_Advanced_Asset_Manager {
                     const combinedTotals = (data.total_styles||0) + (data.total_scripts||0);
                     $('#asm_totals').html('Total scanned size: <strong>' + humanBytes(combinedTotals) + '</strong> (styles: ' + humanBytes(data.total_styles||0) + ', scripts: ' + humanBytes(data.total_scripts||0) + ')');
 
-                    // CSS Files Section
                     if (styles.length > 0) {
-                        html += '<h2 style="margin-top:20px;margin-bottom:10px;padding:10px;background:#f0f0f1;border-left:4px solid #2271b1;">Style Files (CSS) - ' + styles.length + ' files</h2>';
-                        html += '<table class="asm-table widefat" style="margin-bottom:30px;">';
+                        html += '<div class="asm-section-header asm-section-css">Style Files (CSS) — ' + styles.length + ' files</div>';
+                        html += '<table class="asm-table">';
                         html += '<thead><tr><th>Handle</th><th>URL</th><th>Source</th><th>Size</th><th>Action</th></tr></thead><tbody>';
                         styles.forEach(s => {
                             const k = norm(s.url) + '|||style';
@@ -786,10 +945,9 @@ final class MBR_Advanced_Asset_Manager {
                         html += '</tbody></table>';
                     }
 
-                    // JavaScript Files Section
                     if (scripts.length > 0) {
-                        html += '<h2 style="margin-top:20px;margin-bottom:10px;padding:10px;background:#f0f0f1;border-left:4px solid #00a32a;">JavaScript Files (JS) - ' + scripts.length + ' files</h2>';
-                        html += '<table class="asm-table widefat">';
+                        html += '<div class="asm-section-header asm-section-js">JavaScript Files (JS) — ' + scripts.length + ' files</div>';
+                        html += '<table class="asm-table">';
                         html += '<thead><tr><th>Handle</th><th>URL</th><th>Source</th><th>Size</th><th>Action</th></tr></thead><tbody>';
                         scripts.forEach(s => {
                             const k = norm(s.url) + '|||script';
@@ -808,7 +966,8 @@ final class MBR_Advanced_Asset_Manager {
                 $disable.parent().show();
             }
 
-            $scan.on('click', function(){
+            $scan.on('click', function(e){
+                e.preventDefault();
                 const pid = parseInt($page.val(), 10);
                 if (!pid){ alert('Select a page'); return; }
 
@@ -839,7 +998,8 @@ final class MBR_Advanced_Asset_Manager {
                 });
             });
 
-            $save.on('click', function(){
+            $save.on('click', function(e){
+                e.preventDefault();
                 const pid = parseInt($page.val(), 10);
                 if (!pid) return;
 
@@ -848,7 +1008,9 @@ final class MBR_Advanced_Asset_Manager {
                     const $cb = $(this);
                     const url = $cb.data('url');
                     const type = $cb.data('type');
-                    const device = $('.asm-device[data-url="'+url+'"][data-type="'+type+'"]').val() || 'any';
+                    // Skip items that are global-only (don't double-save)
+                    const isGlobalOnly = isGlobal(url, type) && !$('.asm-global[data-url="' + url + '"][data-type="' + type + '"]').is(':checked');
+                    const device = $('.asm-device[data-url="' + url + '"][data-type="' + type + '"]').val() || 'any';
                     items.push({ url, type, device });
                 });
 
@@ -861,21 +1023,20 @@ final class MBR_Advanced_Asset_Manager {
                 }, function(res){
                     $('#asm_saving_overlay').hide();
                     if (res.success){
-                        $fb.text('✔ Saved ' + (res.data.saved||0) + ' rule(s)').css('color','green');
+                        $fb.text('✔ Saved ' + (res.data.saved||0) + ' rule(s)').css('color','#a6e3a1');
                         setTimeout(() => $fb.text(''), 4000);
-                        
-                        // Update stats
                         updateStats(items);
                     } else {
-                        $fb.text('✖ ' + (res.data||'Error')).css('color','red');
+                        $fb.text('✖ ' + (res.data||'Error')).css('color','#f38ba8');
                     }
                 }).fail(function(){
                     $('#asm_saving_overlay').hide();
-                    $fb.text('✖ Save failed').css('color','red');
+                    $fb.text('✖ Save failed').css('color','#f38ba8');
                 });
             });
 
-            $clear.on('click', function(){
+            $clear.on('click', function(e){
+                e.preventDefault();
                 if (!confirm('Clear all blocking rules for this page?')) return;
                 const pid = parseInt($page.val(), 10);
                 if (!pid) return;
@@ -889,21 +1050,25 @@ final class MBR_Advanced_Asset_Manager {
                     $('#asm_saving_overlay').hide();
                     if (res.success){
                         $('.asm-block').prop('checked', false);
-                        $fb.text('✔ Cleared').css('color','green');
+                        // Re-check any that are still global
+                        globalBlocklist.forEach(g => {
+                            const $block = $('.asm-block[data-url="' + g.url + '"][data-type="' + g.type + '"]');
+                            if ($block.length) $block.prop('checked', true);
+                        });
+                        $fb.text('✔ Page rules cleared').css('color','#a6e3a1');
                         setTimeout(() => $fb.text(''), 3000);
-                        
-                        // Hide stats header
                         $('#asm_stats_header').hide();
                     } else {
-                        $fb.text('✖ Error').css('color','red');
+                        $fb.text('✖ Error').css('color','#f38ba8');
                     }
                 }).fail(function(){
                     $('#asm_saving_overlay').hide();
-                    $fb.text('✖ Failed').css('color','red');
+                    $fb.text('✖ Failed').css('color','#f38ba8');
                 });
             });
 
-            $preview.on('click', function(){
+            $preview.on('click', function(e){
+                e.preventDefault();
                 const pid = parseInt($page.val(), 10);
                 if (!pid || !lastScanData || !lastScanData.permalink) return;
 
@@ -916,24 +1081,18 @@ final class MBR_Advanced_Asset_Manager {
                     items.push({ url, type, device });
                 });
 
-                // Use localStorage instead of cookies - no size limit issues
                 try {
                     const previewData = {};
                     previewData[pid] = items;
                     localStorage.setItem('mbr_asm_preview_blocklist', JSON.stringify(previewData));
                     localStorage.setItem('mbr_asm_preview_expires', Date.now() + 3600000);
-                    
-                    console.log('Stored preview data:', items.length, 'items');
                 } catch(e) {
-                    console.error('Failed to store preview data:', e);
                     alert('Failed to save preview data: ' + e.message);
                     return;
                 }
 
-                // Small delay to ensure localStorage is written before opening tab
                 setTimeout(() => {
                     const previewUrl = addParam(lastScanData.permalink, 'mbr_asm_preview', '1') + '&t=' + Date.now();
-                    // Reuse the same preview tab if it exists, otherwise open new one
                     window.open(previewUrl, 'mbr_asm_preview_tab');
                 }, 50);
             });
@@ -951,10 +1110,10 @@ final class MBR_Advanced_Asset_Manager {
                 }, function(res){
                     if (res.success){
                         currentDisabled = res.data.disabled;
-                        $fb.text('✔ Updated').css('color','green');
+                        $fb.text('✔ Updated').css('color','#a6e3a1');
                         setTimeout(() => $fb.text(''), 3000);
                     } else {
-                        $fb.text('✖ Error').css('color','red');
+                        $fb.text('✖ Error').css('color','#f38ba8');
                     }
                 });
             });
@@ -1444,6 +1603,55 @@ final class MBR_Advanced_Asset_Manager {
             delete_post_meta( $page_id, self::META_DISABLE );
         }
         wp_send_json_success( [ 'disabled' => (bool) $disabled ], 200 );
+    }
+
+    public function ajax_save_global_blocklist() {
+        check_ajax_referer( 'mbr_asm_safe' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Forbidden', 200 );
+        }
+        $items = isset( $_POST['items'] ) ? json_decode( sanitize_text_field( wp_unslash( $_POST['items'] ) ), true ) : [];
+        if ( ! is_array( $items ) ) {
+            wp_send_json_error( 'Invalid items payload', 200 );
+        }
+
+        $clean = [];
+        foreach ( $items as $row ) {
+            if ( ! is_array( $row ) ) {
+                continue;
+            }
+            $url = isset( $row['url'] ) ? esc_url_raw( $row['url'] ) : '';
+            $type = isset( $row['type'] ) ? sanitize_key( $row['type'] ) : '';
+            $device = isset( $row['device'] ) ? sanitize_key( $row['device'] ) : 'any';
+            if ( ! $url ) {
+                continue;
+            }
+            if ( $type !== 'style' && $type !== 'script' ) {
+                continue;
+            }
+            if ( ! in_array( $device, [ 'any', 'mobile', 'desktop' ], true ) ) {
+                $device = 'any';
+            }
+            if ( $type === 'script' && $this->is_critical_script( '', $url ) ) {
+                continue;
+            }
+            $clean[] = [ 'url' => $url, 'type' => $type, 'device' => $device ];
+        }
+
+        update_option( self::GLOBAL_KEY, $clean, false );
+        wp_send_json_success( [ 'saved' => count( $clean ) ], 200 );
+    }
+
+    public function ajax_get_global_blocklist() {
+        check_ajax_referer( 'mbr_asm_safe' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Forbidden', 200 );
+        }
+        $items = get_option( self::GLOBAL_KEY, [] );
+        if ( ! is_array( $items ) ) {
+            $items = [];
+        }
+        wp_send_json_success( $items, 200 );
     }
 }
 

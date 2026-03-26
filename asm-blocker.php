@@ -48,6 +48,11 @@ function mbr_asm_get_saved_blocklist_for($post_id){
     if (!is_array($items)) $items = [];
     return $items;
 }
+function mbr_asm_get_global_blocklist(){
+    $items = get_option('mbr_asm_global_blocklist', []);
+    if (!is_array($items)) $items = [];
+    return $items;
+}
 function mbr_asm_filter_by_device_template($items){
     $dev = mbr_asm_device_current();
     $tpl = mbr_asm_template_current();
@@ -132,14 +137,24 @@ function mbr_asm_is_critical_wp_script($handle, $url) {
 // SERVER-SIDE: dequeue (skip in preview)
 add_action('wp_enqueue_scripts', function() {
     if (mbr_asm_is_scanning_ctx() || mbr_asm_is_preview_ctx()) return;
-    if (is_admin() || !is_singular()) return;
-    $post_id = get_queried_object_id();
-    if (!$post_id) return;
+    if (is_admin()) return;
     
-    // Check if blocking is temporarily disabled for editors
-    if (mbr_asm_is_disabled_for_editors($post_id)) return;
-
-    $items = mbr_asm_filter_by_device_template( mbr_asm_get_saved_blocklist_for($post_id) );
+    $post_id = 0;
+    $items = [];
+    
+    if (is_singular()) {
+        $post_id = get_queried_object_id();
+        if ($post_id) {
+            // Check if blocking is temporarily disabled for editors
+            if (mbr_asm_is_disabled_for_editors($post_id)) return;
+            $items = mbr_asm_filter_by_device_template( mbr_asm_get_saved_blocklist_for($post_id) );
+        }
+    }
+    
+    // Merge global blocklist (Block on All Pages)
+    $global_items = mbr_asm_filter_by_device_template( mbr_asm_get_global_blocklist() );
+    $items = array_merge($items, $global_items);
+    
     if (empty($items)) return;
 
     $blocked_styles = []; $blocked_scripts = [];
@@ -208,16 +223,24 @@ add_action('wp_enqueue_scripts', function() {
 
 // CLIENT-SIDE: includes preview override
 add_action('wp_head', function () {
-    if (is_admin() || !is_singular()) return;
+    if (is_admin()) return;
     if (mbr_asm_is_scanning_ctx()) return;
 
-    $post_id = get_queried_object_id();
-    if (!$post_id) return;
+    $post_id = 0;
+    $is_disabled = false;
+    $saved = [];
     
-    // Check if blocking is temporarily disabled for editors
-    $is_disabled = mbr_asm_is_disabled_for_editors($post_id);
+    if (is_singular()) {
+        $post_id = get_queried_object_id();
+        if ($post_id) {
+            $is_disabled = mbr_asm_is_disabled_for_editors($post_id);
+            $saved = mbr_asm_filter_by_device_template( mbr_asm_get_saved_blocklist_for($post_id) );
+        }
+    }
 
-    $saved = mbr_asm_filter_by_device_template( mbr_asm_get_saved_blocklist_for($post_id) );
+    // Merge global blocklist (Block on All Pages)
+    $global_saved = mbr_asm_filter_by_device_template( mbr_asm_get_global_blocklist() );
+    $saved = array_merge($saved, $global_saved);
 
     $styles = []; $scripts = [];
     foreach ($saved as $row) {

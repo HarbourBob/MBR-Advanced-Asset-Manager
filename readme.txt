@@ -1,11 +1,9 @@
 === MBR Advanced Asset Manager ===
-
-Plugin URI: https://littlewebshack.com
-Author: Robert Palmer
-Author URI: https://madebyrobert.co.uk
+Contributors: Robert Palmer
+Tags: performance, optimization, css, javascript, assets
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.3.0
+Stable tag: 2.4.0
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -30,6 +28,7 @@ This version has been completely rewritten to work without any external services
 
 * **Local Scanning** - Scans pages using WordPress's built-in HTTP functions
 * **Device-Specific Rules** - Block assets for mobile, desktop, or both
+* **Block on All Pages** - Toggle any asset to be blocked globally across your entire site
 * **Preview Mode** - Test blocking rules before saving them (dry-run)
 * **Size Analysis** - See file sizes to identify the biggest opportunities
 * **Easy Interface** - Simple admin page to scan, select, and block assets
@@ -125,7 +124,23 @@ Yes! The plugin intelligently skips blocking when page builders are in edit mode
 
 Assets are only blocked on the public-facing site, never in the page builder editors.
 
+== Screenshots ==
+
+1. Admin interface showing scanned assets with sizes
+2. Device-specific blocking options (mobile/desktop/both)
+
 == Changelog ==
+
+= 2.4.0 =
+* **Added**: "Block on All Pages" — toggle any asset to be blocked globally across every page on your site
+* **Added**: Global rules counter in the stats header
+* **Added**: New AJAX endpoints for saving/loading the global blocklist
+* **Updated**: MU-Plugin blocker (asm-blocker.php) now merges global blocklist with per-page rules
+* **Updated**: Global blocking works on non-singular pages (archives, 404, etc.)
+* **UI Overhaul**: Dark mode interface with Catppuccin Mocha colour palette
+* **UI Overhaul**: Replaced all checkboxes with stylish toggle switches
+* **UI Overhaul**: Colour-coded toggles — red for block, purple for global, blue for settings
+* **UI Overhaul**: Improved table styling, section headers, and overall layout
 
 = 2.3.0 =
 Minor bug fixes
