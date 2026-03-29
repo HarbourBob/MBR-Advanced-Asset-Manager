@@ -3,7 +3,7 @@ Contributors: Robert Palmer
 Tags: performance, optimization, css, javascript, assets
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.4.0
+Stable tag: 2.5.0
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -26,9 +26,10 @@ This version has been completely rewritten to work without any external services
 
 **Key Features:**
 
-* **Local Scanning** - Scans pages using WordPress's built-in HTTP functions
+* **Local Scanning** - Scans pages, posts and custom post types using WordPress's built-in HTTP functions
 * **Device-Specific Rules** - Block assets for mobile, desktop, or both
 * **Block on All Pages** - Toggle any asset to be blocked globally across your entire site
+* **All Post Types** - Manage assets on pages, posts, WooCommerce products, or any public custom post type
 * **Preview Mode** - Test blocking rules before saving them (dry-run)
 * **Size Analysis** - See file sizes to identify the biggest opportunities
 * **Easy Interface** - Simple admin page to scan, select, and block assets
@@ -130,6 +131,15 @@ Assets are only blocked on the public-facing site, never in the page builder edi
 2. Device-specific blocking options (mobile/desktop/both)
 
 == Changelog ==
+
+= 2.5.0 =
+* **Added**: Support for Posts and all public Custom Post Types (not just Pages)
+* **Added**: Dropdown now groups items by post type using optgroups (Pages, Posts, Products, etc.)
+* **Updated**: Label changed from "Page" to "Content" to reflect broader scope
+* **Updated**: Subtitle text updated to reflect posts/CPT support
+* **Fixed**: Added preventDefault() to all button handlers to prevent page refresh after save
+* **Fixed**: Dropdown text now renders in white for better readability on the dark theme
+* **Styled**: Optgroup headers use purple accent to match the dark theme
 
 = 2.4.0 =
 * **Added**: "Block on All Pages" — toggle any asset to be blocked globally across every page on your site

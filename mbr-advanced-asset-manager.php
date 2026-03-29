@@ -3,7 +3,7 @@
  * Plugin Name:       MBR Advanced Asset Manager
  * Plugin URI:        https://littlewebshack.com
  * Description:       Easily manage/block unnecessary and unwanted CSS (styles)/JS (scripts) from running on individual pages. Save on average 2-3MB. No external services required.
- * Version:           2.4.0
+ * Version:           2.5.0
  * Author:            Robert Palmer
  * Author URI:        https://littlewebshack.com
  * Text Domain:       mbr-advanced-asset-manager
@@ -559,6 +559,7 @@ final class MBR_Advanced_Asset_Manager {
 .asm-wrap select,.asm-wrap .asm-device{background:#313244;color:#fff;border:1px solid #45475a;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;cursor:pointer}
 .asm-wrap select:focus,.asm-wrap .asm-device:focus{border-color:#89b4fa;box-shadow:0 0 0 2px rgba(137,180,250,.2)}
 .asm-wrap select option{background:#313244;color:#fff}
+.asm-wrap select optgroup{background:#181825;color:#cba6f7;font-weight:700;font-style:normal;font-size:12px;letter-spacing:.3px}
 .asm-wrap .button{background:#313244;color:#cdd6f4;border:1px solid #45475a;border-radius:6px;padding:6px 16px;font-size:13px;cursor:pointer;transition:all .15s ease}
 .asm-wrap .button:hover{background:#45475a;border-color:#585b70;color:#fff}
 .asm-wrap .button:focus{box-shadow:0 0 0 2px rgba(137,180,250,.25);outline:none}
@@ -643,10 +644,31 @@ final class MBR_Advanced_Asset_Manager {
             return;
         }
         $pages = get_pages( [ 'sort_column' => 'post_title', 'sort_order' => 'ASC' ] );
+        
+        // Build grouped list of all public post types
+        $public_types = get_post_types( [ 'public' => true ], 'objects' );
+        $grouped_posts = [];
+        foreach ( $public_types as $pt ) {
+            if ( $pt->name === 'attachment' ) {
+                continue;
+            }
+            $query = new WP_Query( [
+                'post_type'      => $pt->name,
+                'posts_per_page' => -1,
+                'post_status'    => 'publish',
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+                'no_found_rows'  => true,
+            ] );
+            if ( $query->have_posts() ) {
+                $grouped_posts[ $pt->labels->name ] = $query->posts;
+            }
+            wp_reset_postdata();
+        }
         ?>
         <div class="asm-wrap">
             <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-            <p class="asm-subtitle"><?php esc_html_e( 'Scan a page, sort by size, and block per device. Use "Preview (dry run)" to test without saving. No external services required.', 'mbr-advanced-asset-manager' ); ?></p>
+            <p class="asm-subtitle"><?php esc_html_e( 'Scan any page, post or custom post type. Sort by size and block per device. Use "Preview (dry run)" to test without saving. No external services required.', 'mbr-advanced-asset-manager' ); ?></p>
             
             <!-- Stats Header -->
             <div id="asm_stats_header" class="asm-stats" style="display:none;">
@@ -666,11 +688,15 @@ final class MBR_Advanced_Asset_Manager {
 
             <div class="asm-controls">
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                    <label for="asm_page" style="font-weight:600;color:#a6adc8;"><?php esc_html_e( 'Page:', 'mbr-advanced-asset-manager' ); ?></label>
+                    <label for="asm_page" style="font-weight:600;color:#a6adc8;"><?php esc_html_e( 'Content:', 'mbr-advanced-asset-manager' ); ?></label>
                     <select id="asm_page">
                         <option value=""><?php esc_html_e( '— Select —', 'mbr-advanced-asset-manager' ); ?></option>
-                        <?php foreach ( $pages as $p ) : ?>
-                            <option value="<?php echo (int) $p->ID; ?>"><?php echo esc_html( $p->post_title ?: "ID {$p->ID}" ); ?></option>
+                        <?php foreach ( $grouped_posts as $type_label => $posts ) : ?>
+                            <optgroup label="<?php echo esc_attr( $type_label ); ?>">
+                                <?php foreach ( $posts as $p ) : ?>
+                                    <option value="<?php echo (int) $p->ID; ?>"><?php echo esc_html( $p->post_title ?: "ID {$p->ID}" ); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
                         <?php endforeach; ?>
                     </select>
                     <button type="button" class="button button-primary" id="asm_scan"><?php esc_html_e( 'Scan assets', 'mbr-advanced-asset-manager' ); ?></button>
