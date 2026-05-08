@@ -32,6 +32,16 @@ A powerful WordPress plugin that helps you optimise page load times by selective
 
 ## What's New
 
+### Version 2.5.1 – 2.5.3 — Scan & Blocking Reliability
+
+A patch series fixing three related issues in the scan-and-block workflow:
+
+- **2.5.3** — Rescanning a page no longer hides items already on the saved blocklist. Token-based scan recognition replaces the auth-dependent check that broke in 2.5.1, and tightens scan-parameter security as a side effect (`?mbr_asm_scan=1` can no longer be used to trivially bypass blocking on a page view).
+- **2.5.2** — Saved blocklists now block reliably for anonymous visitors, not just in preview. The client-side blocker runs for every blocked item and loads in `<head>` before scripts execute, providing a safety net against cached HTML, direct `<script src="...">` echoes, and late-injected assets.
+- **2.5.1** — Scans no longer include admin-bar assets (`dashicons`, `admin-bar.css`, `admin-bar.js`) that real visitors never load. The loopback now fetches the page anonymously rather than forwarding admin login cookies.
+
+**Important when updating to 2.5.3**: If you've installed `asm-blocker.php` to `wp-content/mu-plugins/`, you must re-copy it after upgrading. See the MU-plugin section below.
+
 ### Version 2.5.0 — Posts, CPTs & UI Polish
 
 - Support for Posts and all public Custom Post Types (not just Pages)
@@ -93,6 +103,12 @@ For maximum blocking effectiveness:
 2. Create the `mu-plugins` folder if it doesn't exist
 3. This enables additional client-side blocking for stubborn assets
 
+**Important — when updating the main plugin**: The MU-plugin file in `wp-content/mu-plugins/` is a manual copy and is **not** updated automatically when you reinstall or upgrade the main plugin. After any plugin update, check the docblock at the top of the bundled `asm-blocker.php` for its internal version. If it's newer than the file in `mu-plugins/`, re-copy it over the top.
+
+Current MU-plugin internal version: **v6.4.0** (shipped with main plugin 2.5.3).
+
+If you skip this step after upgrading to 2.5.3, you'll see scans hide assets that are already on the saved blocklist — the older MU-plugin doesn't recognise the new token-based scan signal.
+
 ---
 
 ## Usage
@@ -144,12 +160,13 @@ Scenario: Unused contact form CSS
 
 The plugin uses a completely local scanning approach:
 
-1. **Loopback Scanning** — Makes HTTP request to your own site using `wp_remote_get()`
-2. **Asset Detection** — Parses HTML to find all CSS and JS files
-3. **Handle Resolution** — Matches assets to WordPress enqueue handles
-4. **Size Detection** — Determines file sizes via HEAD requests
-5. **Local Storage** — Saves per-page rules in post meta, global rules in `wp_options`
-6. **Runtime Blocking** — Dequeues assets on frontend based on saved rules (per-page + global merged)
+1. **Loopback Scanning** — Makes anonymous HTTP request to your own site using `wp_remote_get()` so the captured asset list matches what real visitors load
+2. **Token-Authenticated Scans** — Each scan carries a one-time 24-char token (stored as a 60-second transient) so the blocker logic can recognise legitimate scans without relying on auth cookies
+3. **Asset Detection** — Parses HTML to find all CSS and JS files
+4. **Handle Resolution** — Matches assets to WordPress enqueue handles
+5. **Size Detection** — Determines file sizes via HEAD requests
+6. **Local Storage** — Saves per-page rules in post meta, global rules in `wp_options`
+7. **Hybrid Runtime Blocking** — Server-side dequeue via `wp_dequeue_script`/`wp_dequeue_style` plus an inline client-side blocker injected at `wp_head` priority 2 as a safety net for cached HTML and direct script echoes (per-page + global rules merged at runtime)
 
 ---
 
@@ -177,7 +194,7 @@ Assets are only blocked on the public-facing site, never in editor mode.
 - Start with the largest files
 - Test thoroughly after blocking
 - Use "All Pages" for assets you're certain aren't needed anywhere
-- Clear all caches after changes
+- Clear all caches after changes (page cache, CDN, browser)
 
 ### DON'T:
 
@@ -220,13 +237,24 @@ Block these types of files first for maximum performance gains:
 - Check `.htaccess` restrictions
 - Contact host to whitelist loopback requests
 
-### Assets Not Being Blocked
+### Cannot Scan Private, Draft, or Password-Protected Content
 
-1. Did you click "Save blocklist"? (Preview doesn't save)
-2. Clear all caches (plugin, server, CDN)
+This is by design from 2.5.1 onwards. The scan loopback runs anonymously to capture the true public asset list, so private/draft content returns 404 and password-protected pages hit the password gate. These don't have public frontend assets anyway — publish a similar test page instead.
+
+### Assets Not Being Blocked on the Frontend
+
+1. Did you click "Save blocklist"? (Preview doesn't save permanent rules)
+2. Clear all caches (plugin, server, CDN, browser)
 3. Test in incognito/private browsing
 4. Verify "disable blocking for editors" is off
 5. Ensure you're not in page builder edit mode
+6. **If you have the MU-plugin installed**: Confirm the version in `wp-content/mu-plugins/asm-blocker.php` matches the bundled one (currently v6.4.0). The MU-plugin doesn't auto-update.
+
+### Rescanning Hides Assets That Are Already Blocked
+
+If you're on **2.5.0–2.5.2** with the MU-plugin installed: known issue, fixed in 2.5.3. Upgrade the main plugin and re-copy `asm-blocker.php` to `mu-plugins/`.
+
+If you're on **2.5.3** and still seeing this: the MU-plugin file in `mu-plugins/` is likely still the older version. Check the docblock at the top — it should read `v6.4.0`. If it doesn't, re-copy from the plugin folder.
 
 ---
 
@@ -259,16 +287,35 @@ Block these types of files first for maximum performance gains:
 - Global blocking rules: `mbr_asm_global_blocklist` in `wp_options`
 - Disable flag: `_mbr_asm_disable` post meta
 - Preview data: Browser localStorage (temporary)
+- Scan tokens: `mbr_asm_scan_*` transients (60-second TTL, auto-cleaned after each scan)
 
 **Performance Impact:**
 
 - Admin scanning: One-time HTTP request per scan
-- Frontend blocking: Minimal overhead (WordPress hooks only)
+- Frontend blocking: Minimal overhead (WordPress hooks plus an inline `<script>` block in `<head>` only when a blocklist applies)
 - No additional database queries beyond post meta and one option lookup
 
 ---
 
 ## Changelog
+
+### [2.5.3]
+
+- **Fixed**: Rescanning no longer hides assets already on the saved blocklist (regression introduced in 2.5.1).
+- **Added**: Token-based scan recognition. Each scan now generates a one-time 24-char token stored as a 60-second transient and validated by the blocker logic. Replaces the `current_user_can()` check that broke when scans became anonymous in 2.5.1.
+- **Security**: Tightened the `?mbr_asm_scan` parameter — previously anyone could append `?mbr_asm_scan=1` to bypass blocking on a page view. Now only legitimate scans (with a valid token) bypass.
+- **MU-Plugin**: Internal version bumped to v6.4.0. Manual re-copy required for users with `asm-blocker.php` installed in `mu-plugins/`.
+
+### [2.5.2]
+
+- **Fixed**: Saved blocklists now block reliably for anonymous visitors, not just in preview mode. Previously the server-side `wp_dequeue_script` call was trusted on its own for any handle that resolved — leaving gaps when page caches snapshotted HTML before the blocklist was saved, when themes echo `<script src="...">` directly, or when assets were re-injected late.
+- **Changed**: The client-side blocker now runs for the full blocklist (was only unresolved handles) and hooks into `wp_head` priority 2 instead of `wp_footer` — so the inline blocker lands in `<head>` before `wp_print_styles` (priority 8) and `wp_print_head_scripts` (priority 9), letting it intercept blocked assets before they execute.
+- **Note**: After upgrading, clear all page caches so the inline blocker is included in cached HTML.
+
+### [2.5.1]
+
+- **Fixed**: Scans no longer return admin-bar assets that real visitors never load — `dashicons`, `admin-bar.css/.js`, and any other "logged-in only" assets injected by themes or plugins. The loopback now fetches the page as an anonymous visitor instead of forwarding admin login cookies.
+- **Note**: As a consequence, private, draft, and password-protected pages can no longer be scanned (the loopback would 404 or hit the password gate). Those pages don't have public frontend assets anyway.
 
 ### [2.5.0]
 
