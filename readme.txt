@@ -3,7 +3,7 @@ Contributors: Robert Palmer
 Tags: performance, optimization, css, javascript, assets
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.5.0
+Stable tag: 2.5.3
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -131,6 +131,20 @@ Assets are only blocked on the public-facing site, never in the page builder edi
 2. Device-specific blocking options (mobile/desktop/both)
 
 == Changelog ==
+
+= 2.5.3 =
+* **Fixed**: Rescanning a page no longer hides assets that are already on the saved blocklist. Regression introduced in 2.5.1: the loopback was made anonymous (to fix the admin-bar leak) but the scan-context check in the optional `asm-blocker.php` MU-plugin requires `current_user_can('manage_options')` to step aside during scans. Anonymous loopback meant the cap check failed, so the MU-plugin applied the saved blocklist *during the scan itself* — making blocked assets invisible to the admin until "Clear all rules" was used.
+* **Added**: Token-based scan recognition. Each scan now generates a one-time 24-char token stored as a 60-second transient and passed as `?mbr_asm_scan=<token>`. The blocker logic validates the token against the transient instead of relying on auth state. This works for anonymous loopback scans and tightens security (anyone hitting `?mbr_asm_scan=1` previously bypassed blocking; now only legitimate scans do).
+* **IMPORTANT — MU-plugin update required**: If you've installed `asm-blocker.php` to `wp-content/mu-plugins/` (the optional enhanced blocker), you MUST re-copy the new `asm-blocker.php` from this plugin folder over the top of the old one. The file in `mu-plugins/` is a manual copy and does not auto-update with a plugin reinstall. If you skip this step, the regression remains. Updated MU-plugin internal version: v6.4.0.
+
+= 2.5.2 =
+* **Fixed**: Saved blocklist now reliably blocks assets for real (anonymous) visitors, not just in preview. Previously the main plugin only injected client-side JS blocking for assets whose handle couldn't be resolved server-side; if a handle resolved, server-side wp_dequeue_script/wp_deregister_script was trusted on its own. That left gaps when a page cache had snapshotted the HTML before the blocklist was saved, when plugins/themes echo `<script src="...">` directly bypassing the WP enqueue API, or when assets were re-injected late by other code. The client-side blocker now runs for the full blocklist as a safety net.
+* **Changed**: Client-side blocker now hooks into `wp_head` priority 2 (was `wp_footer` priority 1) so the inline script lands before `wp_print_styles` (priority 8) and `wp_print_head_scripts` (priority 9), letting it intercept blocked head assets before they execute rather than only catching late/dynamic ones.
+* **Note**: After upgrading, clear all page caches (SiteGround Optimizer, WP Rocket, server cache, browser cache) so the new inline blocker is included in cached HTML.
+
+= 2.5.1 =
+* **Fixed**: Scanner now lists only assets that load on the public frontend. Previously the loopback request forwarded the admin's WordPress login cookies, so WP rendered the page with the admin bar showing — pulling in admin-bar.css/.js, dashicons, and any other "logged-in only" assets that real visitors never load. The scan now fetches the page anonymously, matching what an actual visitor sees.
+* **Note**: As a consequence, private, draft, and password-protected pages can no longer be scanned (the loopback would 404 or hit the password gate). Those pages don't have public frontend assets anyway.
 
 = 2.5.0 =
 * **Added**: Support for Posts and all public Custom Post Types (not just Pages)

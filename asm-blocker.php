@@ -1,11 +1,13 @@
 <?php
 /**
- * Advanced Asset Manager - Blocker Engine v6.3.1 (MU-Plugin)
+ * Advanced Asset Manager - Blocker Engine v6.4.0 (MU-Plugin)
  *
  * - Per-device & per-template rules (any / specific template) for server-side dequeue and client-side blocking.
  * - Dry-run preview cookie + ?asm_preview=1 support (client-side only in preview).
  * - Strong hybrid blocking and scan-safe behaviour.
  * - Supports temporary disable for editors via _asm_disable meta key.
+ * - v6.4.0: Token-based scan recognition (works for anonymous loopback scans
+ *   introduced by the main plugin in v2.5.1).
  */
 
 if (!defined('ABSPATH')) exit;
@@ -15,11 +17,23 @@ function mbr_asm_is_scanning_ctx() {
     if (defined('MBR_ASM_SCANNING') && MBR_ASM_SCANNING) {
         return true;
     }
-    // Scan mode requires admin permission
-    if (isset($_GET['mbr_asm_scan'])) {
-        return current_user_can('manage_options');
+    if (!isset($_GET['mbr_asm_scan'])) {
+        return false;
     }
-    return false;
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only scan flag, validated below
+    $value = sanitize_text_field( wp_unslash( $_GET['mbr_asm_scan'] ) );
+
+    // Token-based validation. The main plugin's scan_via_loopback() generates a
+    // 24-char token and stores it as a short-lived transient before firing the
+    // (anonymous, no-cookies) loopback request. Validating here lets us recognise
+    // the scan without needing current_user_can('manage_options'), which would
+    // never be true for an unauthenticated loopback.
+    if (preg_match('/^[A-Za-z0-9]{24}$/', $value)) {
+        return (bool) get_transient('mbr_asm_scan_' . $value);
+    }
+
+    // Legacy fallback: authenticated admin directly appending ?mbr_asm_scan=1.
+    return $value === '1' && current_user_can('manage_options');
 }
 function mbr_asm_is_preview_ctx() {
     // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only preview flag for front-end display

@@ -3,7 +3,7 @@
  * Plugin Name:       MBR Advanced Asset Manager
  * Plugin URI:        https://littlewebshack.com
  * Description:       Easily manage/block unnecessary and unwanted CSS (styles)/JS (scripts) from running on individual pages. Save on average 2-3MB. No external services required.
- * Version:           2.5.0
+ * Version:           2.5.3
  * Author:            Robert Palmer
  * Author URI:        https://littlewebshack.com
  * Text Domain:       mbr-advanced-asset-manager
@@ -86,11 +86,10 @@ final class MBR_Advanced_Asset_Manager {
             return;
         }
         
-        // Scan mode requires admin permission
-        if ( isset( $_GET['mbr_asm_scan'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            if ( ! current_user_can( 'manage_options' ) ) {
-                return;
-            }
+        // Skip blocking during legitimate scan loopbacks (validated by token).
+        // Anyone hitting ?mbr_asm_scan=garbage is treated as a normal visitor and
+        // gets blocking applied — this prevents trivial bypass of the blocklist.
+        if ( $this->is_scan_loopback() ) {
             return;
         }
         
@@ -241,6 +240,7 @@ final class MBR_Advanced_Asset_Manager {
         $blocked_count = 0;
         $skipped_count = 0;
         $not_found_urls = []; // Track scripts we couldn't block via handle
+        $client_block_urls = []; // ALL blocked URLs — client-side safety net for cache/late-loaded assets
         
         foreach ( $blocklist as $item ) {
             if ( ! is_array( $item ) ) {
@@ -259,6 +259,17 @@ final class MBR_Advanced_Asset_Manager {
                 continue;
             }
             
+            // Skip critical scripts entirely — never block them, anywhere
+            if ( $type === 'script' && $this->is_critical_script( '', $url ) ) {
+                continue;
+            }
+            
+            // Add to client-side block list as a safety net. Server-side wp_dequeue
+            // can be bypassed by: page caches that snapshotted before the blocklist was
+            // saved, plugins/themes that echo <script src="..."> directly, or any other
+            // mechanism that doesn't go through the proper WP enqueue API.
+            $client_block_urls[] = [ 'url' => $url, 'type' => $type ];
+            
             if ( $type === 'style' && ! empty( $wp_styles ) && is_object( $wp_styles ) ) {
                 $handle = $this->find_handle_by_url( $wp_styles, $url );
                 if ( $handle ) {
@@ -272,7 +283,7 @@ final class MBR_Advanced_Asset_Manager {
             } elseif ( $type === 'script' && ! empty( $wp_scripts ) && is_object( $wp_scripts ) ) {
                 $handle = $this->find_handle_by_url( $wp_scripts, $url );
                 if ( $handle ) {
-                    // Never block critical WordPress core scripts
+                    // Defence in depth — also check by handle
                     if ( $this->is_critical_script( $handle, $url ) ) {
                         continue;
                     }
@@ -280,25 +291,25 @@ final class MBR_Advanced_Asset_Manager {
                     wp_deregister_script( $handle );
                     $blocked_count++;
                 } else {
-                    // Check if it's a critical script even without handle
-                    if ( ! $this->is_critical_script( '', $url ) ) {
-                        $skipped_count++;
-                        $not_found_urls[] = [ 'url' => $url, 'type' => 'script' ];
-                    }
+                    $skipped_count++;
+                    $not_found_urls[] = [ 'url' => $url, 'type' => 'script' ];
                 }
             }
         }
         
-        // For scripts without handles, use client-side blocking
-        if ( ! empty( $not_found_urls ) ) {
-            add_action( 'wp_footer', function() use ( $not_found_urls ) {
+        // Inject the client-side blocker for the FULL blocklist (not just unresolved
+        // handles). Hooked to wp_head priority 2 so the inline script lands in <head>
+        // before wp_print_styles (priority 8) and wp_print_head_scripts (priority 9),
+        // letting it intercept blocked assets before they execute.
+        if ( ! empty( $client_block_urls ) ) {
+            add_action( 'wp_head', function() use ( $client_block_urls ) {
                 static $injected = false;
                 if ( $injected ) {
-                    return; // Already injected, don't duplicate
+                    return;
                 }
                 $injected = true;
-                $this->inject_client_side_blocker( $not_found_urls );
-            }, 1 );
+                $this->inject_client_side_blocker( $client_block_urls );
+            }, 2 );
         }
         
         // Mark as completed
@@ -1164,15 +1175,13 @@ final class MBR_Advanced_Asset_Manager {
             wp_send_json_error( [ 'error' => 'Could not get permalink' ], 200 );
         }
 
-        $scan_url = add_query_arg( 'mbr_asm_scan', '1', $url );
-
         $existing = get_post_meta( $page_id, self::META_KEY, true );
         if ( ! is_array( $existing ) ) {
             $existing = [];
         }
 
         // Scan using local loopback method
-        $result = $this->scan_via_loopback( $scan_url );
+        $result = $this->scan_via_loopback( $url );
 
         if ( empty( $result['error'] ) ) {
             $index = $this->build_handle_index();
@@ -1186,6 +1195,14 @@ final class MBR_Advanced_Asset_Manager {
     }
 
     private function scan_via_loopback( $url ) {
+        // Generate a one-time scan token and store it as a transient. The loopback
+        // is unauthenticated (no cookies forwarded — see v2.5.1), so we can't rely
+        // on current_user_can() to identify a legitimate scan. The token lets the
+        // blocker logic (in this plugin AND the optional asm-blocker.php MU-plugin)
+        // recognise the scan and step aside without the request being authenticated.
+        $token = $this->generate_scan_token();
+        $scan_url = add_query_arg( 'mbr_asm_scan', $token, $url );
+
         $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
         $headers = [
             'User-Agent' => $ua,
@@ -1201,25 +1218,27 @@ final class MBR_Advanced_Asset_Manager {
             } )(),
         ];
 
-        $cookies = [];
-        if ( isset( $_COOKIE ) && is_array( $_COOKIE ) ) {
-            foreach ( $_COOKIE as $name => $value ) {
-                if ( strpos( $name, 'wordpress' ) !== false || strpos( $name, 'wp-' ) !== false ) {
-                    $cookies[] = new WP_Http_Cookie( [ 'name' => $name, 'value' => $value ] );
-                }
-            }
-        }
-
+        // Intentionally do NOT forward the admin's WordPress auth cookies.
+        // The scan is already authorised server-side via current_user_can( 'manage_options' )
+        // in ajax_get_assets(). Forwarding login cookies would make WP render the page
+        // with the admin bar showing, which pulls in admin-bar.css/.js, dashicons, and
+        // any other "logged-in only" assets — none of which load for real visitors.
+        // Fetching anonymously gives a true frontend asset list.
         $args = [
             'timeout' => 30,
             'redirection' => 5,
             'sslverify' => true,
             'headers' => $headers,
-            'cookies' => $cookies,
+            'cookies' => [],
             'httpversion' => '1.1',
             'blocking' => true,
         ];
-        $resp = wp_remote_get( add_query_arg( 'mbr_asm_nocache', '1', $url ), $args );
+        $resp = wp_remote_get( add_query_arg( 'mbr_asm_nocache', '1', $scan_url ), $args );
+
+        // Clean up the scan token now that the loopback has returned (success or otherwise).
+        // The transient also has a short TTL as a fallback, but explicit cleanup keeps
+        // things tidy.
+        $this->consume_scan_token( $token );
 
         if ( is_wp_error( $resp ) ) {
             return [ 'error' => 'Fetch failed: ' . $resp->get_error_message() . '. Try checking your site\'s firewall or security settings.' ];
@@ -1240,6 +1259,53 @@ final class MBR_Advanced_Asset_Manager {
         }
 
         return $this->parse_assets( $html );
+    }
+
+    /**
+     * Generate a one-time scan token and store it as a short-lived transient.
+     * Used to identify legitimate (admin-initiated) loopback scans without
+     * relying on auth cookies or current_user_can() — both unavailable in an
+     * anonymous loopback request.
+     *
+     * @return string 24-char alphanumeric token.
+     */
+    private function generate_scan_token() {
+        $token = wp_generate_password( 24, false ); // alphanumeric, no symbols
+        // 60-second window is plenty for a loopback HTTP request; expires on its
+        // own if anything goes wrong before consume_scan_token() can clean up.
+        set_transient( 'mbr_asm_scan_' . $token, 1, 60 );
+        return $token;
+    }
+
+    /**
+     * Delete a scan token's transient. Called after the loopback completes.
+     */
+    private function consume_scan_token( $token ) {
+        delete_transient( 'mbr_asm_scan_' . $token );
+    }
+
+    /**
+     * Is the current request a legitimate scan loopback?
+     * Validates the token in $_GET['mbr_asm_scan'] against the transient set
+     * by generate_scan_token(). Falls back to the legacy ?mbr_asm_scan=1 +
+     * current_user_can() check for backward compatibility (e.g. an admin
+     * appending ?mbr_asm_scan=1 manually for debugging).
+     *
+     * @return bool
+     */
+    private function is_scan_loopback() {
+        if ( ! isset( $_GET['mbr_asm_scan'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return false;
+        }
+        $value = sanitize_text_field( wp_unslash( $_GET['mbr_asm_scan'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        // Token-based validation — the path used by anonymous loopback scans.
+        if ( preg_match( '/^[A-Za-z0-9]{24}$/', $value ) ) {
+            return (bool) get_transient( 'mbr_asm_scan_' . $value );
+        }
+
+        // Legacy fallback for authenticated direct access.
+        return $value === '1' && current_user_can( 'manage_options' );
     }
 
     private function parse_assets( $html ) {
